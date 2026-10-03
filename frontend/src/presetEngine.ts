@@ -1,5 +1,5 @@
 export type CurvePoint = [number, number];
-export type ParsedStyle = { name: string; format: 'xmp' | 'costyle'; params: Record<string,string>; curves: Record<string,CurvePoint[]>; hsl: Record<string,{h:number;s:number;l:number}>; colorBalance: Record<string,number[]>; };
+export type ParsedStyle = { name: string; format: 'xmp' | 'costyle'; params: Record<string,string>; curves: Record<string,CurvePoint[]>; hsl: Record<string,{h:number;s:number;l:number}>; colorBalance: Record<string,number[]>; colorCorrections: string[][]; };
 const channels = ['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'];
 function curve(value?:string):CurvePoint[] { if(!value)return []; return value.split(/[;,]/).length<4?[]:(value.split(';').map(p=>p.split(',').map(Number) as CurvePoint).filter(p=>p.length===2&&p.every(Number.isFinite))); }
 export function parseStyle(source:string,filename:string):ParsedStyle {
@@ -23,7 +23,7 @@ export function parseStyle(source:string,filename:string):ParsedStyle {
  }
  const hsl:ParsedStyle['hsl']={};
  for(const channel of channels) { const h=Number(params['HueAdjustment'+channel]??0),s=Number(params['SaturationAdjustment'+channel]??0),l=Number(params['LuminanceAdjustment'+channel]??0); if(h||s||l)hsl[channel.toLowerCase()]={h,s,l}; }
- const colorBalance:ParsedStyle['colorBalance']={};
+ const colorCorrections=format==='costyle'&&params.ColorCorrections?params.ColorCorrections.split(';').filter(Boolean).map(row=>row.split(',')):[];\n const colorBalance:ParsedStyle['colorBalance']={};
  for(const key of ['ColorBalanceShadow','ColorBalanceMidtone','ColorBalanceHighlight']) if(params[key]) colorBalance[key]=params[key].split(/[;,]/).map(Number);
  const xmlName=(()=>{if(format!=='xmp'||typeof DOMParser==='undefined')return undefined;const doc=new DOMParser().parseFromString(source,'application/xml');const nameNode=Array.from(doc.getElementsByTagName('*')).find(n=>(n.localName||n.nodeName.split(':').pop())==='Name');return nameNode?.textContent?.trim()||nameNode?.getElementsByTagName('*')[0]?.textContent?.trim()||undefined;})();
  return {name:params.Name||params.PresetName||xmlName||filename.replace(/\.(xmp|costyle)$/i,''),format,params,curves,hsl,colorBalance};
