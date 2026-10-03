@@ -27,9 +27,9 @@ export default function App() {
       if (ext !== 'xmp' && ext !== 'costyle') continue;
       const source = await file.text();
       const params: Record<string,string> = {};
-      let name = file.name.replace(/\\.(xmp|costyle)$/i, '');
+      let name = file.name.replace(/\.(xmp|costyle)$/i, '');
       if (ext === 'costyle') {
-        for (const match of source.matchAll(/<E\\s+K="([^"]+)"\\s+V="([^"]*)"\\s*\\/>/g)) params[match[1]] = match[2];
+        for (const match of source.matchAll(/<E\s+K="([^"]+)"\s+V="([^"]*)"\s*\/>/g)) params[match[1]] = match[2];
         name = params.Name || name;
       } else {
         for (const match of source.matchAll(/crs:([A-Za-z0-9]+)="([^"]*)"/g)) params[match[1]] = match[2];
@@ -94,7 +94,7 @@ export default function App() {
         const a = adjustments[photo.id] || initial; ctx.filter = `brightness(${Math.pow(2,a.exposure/100)}) contrast(${100+a.contrast}%) saturate(${100+a.saturation}%) sepia(${Math.max(0,a.warmth)/250}) hue-rotate(${Math.min(0,a.warmth)/2}deg)`; ctx.drawImage(image, 0, 0);
         const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Не удалось обработать ' + photo.name)), 'image/png'));
         const url = URL.createObjectURL(blob); const link = document.createElement('a');
-        link.href = url; link.download = photo.name.replace(/\\.[^.]+$/, '') + '-edited.png';
+        link.href = url; link.download = photo.name.replace(/\.[^.]+$/, '') + '-edited.png';
         document.body.appendChild(link); link.click(); link.remove();
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
         await new Promise(resolve => window.setTimeout(resolve, 250));
