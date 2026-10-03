@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import JSZip from 'jszip';
 import { parseStyle, applyCurveChannel, applyHsl, applyColorBalance } from './presetEngine';
 import { Aperture, Upload, Image as ImageIcon, SlidersHorizontal, ScanFace, WandSparkles, Download, RotateCcw, X, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -24,7 +24,6 @@ export default function App() {
   const inputRef = useRef<HTMLInputElement>(null);
   const current = photos[active];
   const adjust = current ? adjustments[current.id] || initial : initial;
-  const filter = useMemo(() => current ? `brightness(${Math.pow(2, adjust.exposure / 100)}) contrast(${100 + adjust.contrast}%) saturate(${100 + adjust.saturation}%) sepia(${Math.max(0, adjust.warmth) / 250}) hue-rotate(${Math.min(0, adjust.warmth) / 2}deg)` : 'none', [current, adjust]);
   useEffect(() => {
     const canvas=previewCanvasRef.current;
     if(!canvas||!current)return;
