@@ -52,14 +52,41 @@ export function applyColorBalance(data:Uint8ClampedArray,balance:ParsedStyle['co
 
 export function applyPresetStyle(data:Uint8ClampedArray, style:{params:Record<string,string>;curves:Record<string,CurvePoint[]>;hsl:ParsedStyle['hsl'];colorBalance:ParsedStyle['colorBalance']}):void {
  const p=style.params;
- const mono=/^(true|1|yes)$/i.test(p.ConvertToGrayscale||p.Monochrome||'') || Number(p.Saturation)<=-99;
- if(mono){
-  const keys=['GrayMixerRed','GrayMixerOrange','GrayMixerYellow','GrayMixerGreen','GrayMixerAqua','GrayMixerBlue','GrayMixerPurple','GrayMixerMagenta'];
-  const weights=keys.map(k=>Number.isFinite(Number(p[k]))?Number(p[k]):({GrayMixerRed:40,GrayMixerOrange:60,GrayMixerYellow: 60,GrayMixerGreen:40,GrayMixerAqua:60,GrayMixerBlue:20,GrayMixerPurple:20,GrayMixerMagenta:40} as Record<string,number>)[k]??0);
-  const total=weights.reduce((a,b)=>a+b,0);
-  for(let i=0;i<data.length;i+=4){const r=data[i],g=data[i+1],b=data[i+2];let y;if(total>0)y=(r*weights[0]+g*weights[3]+b*weights[5]+((r+g)/2)*weights[1]+((r+g)/2)*weights[2]+((g+b)/2)*weights[4]+((r+b)/2)*weights[6]+((r+b)/2)*weights[7])/total;else y=.2126*r+.7152*g+.0722*b;data[i]=data[i+1]=data[i+2]=Math.max(0,Math.min(255,y));}
+ const num=(keys:string[],fallback=0)=>{for(const k of keys){if(p[k]!==undefined&&p[k].trim()!==""){const n=Number(p[k]);if(Number.isFinite(n))return n;}}return fallback};
+ const truth=(v:string|undefined)=>/^(true|1|yes)$/i.test(v||"");
+ const mono=truth(p.ConvertToGrayscale)||truth(p.Monochrome)||num(['Saturation'])<=-99;
+ const exposure=Math.pow(2,num(['Exposure2012','Exposure']) );
+ const contrast=1+num(['Contrast2012','Contrast'])/100;
+ const saturation=mono?0:1+num(['Saturation'])/100;
+ const temp=num(['Temperature'],5500);
+ const warmth=p.Temperature===undefined?0:clamp((temp-5500)/250,-2,2)*7;
+ const inputBlack=num(['InputBlack','LevelsInputBlack'],0), inputWhite=num(['InputWhite','LevelsInputWhite'],255);
+ const outputBlack=num(['OutputBlack','LevelsOutputBlack'],0), outputWhite=num(['OutputWhite','LevelsOutputWhite'],255);
+ const black=clamp(inputBlack/255), white=clamp(inputWhite/255,0.001,1);
+ const outB=clamp(outputBlack/255), outW=clamp(outputWhite/255);
+ const grayKeys=['GrayMixerRed','GrayMixerOrange','GrayMixerYellow','GrayMixerGreen','GrayMixerAqua','GrayMixerBlue','GrayMixerPurple','GrayMixerMagenta'];
+ const defaultWeights=[40,60,60,40,60,20,20,40];
+ const weights=grayKeys.map((k,i)=>num([k],defaultWeights[i]));
+ for(let i=0;i<data.length;i+=4){
+   let r=data[i]/255,g=data[i+1]/255,b=data[i+2]/255;
+   r=clamp((r-black)/(white-black))* (outW-outB)+outB;
+   g=clamp((g-black)/(white-black))* (outW-outB)+outB;
+   b=clamp((b-black)/(white-black))* (outW-outB)+outB;
+   r*=exposure;g*=exposure;b*=exposure;
+   r=(r-.5)*contrast+.5;g=(g-.5)*contrast+.5;b=(b-.5)*contrast+.5;
+   const y=.2126*r+.7152*g+.0722*b;
+   r=y+(r-y)*saturation+warmth/255;
+   g=y+(g-y)*saturation;
+   b=y+(b-y)*saturation-warmth/255;
+   if(mono){
+     const sum=weights.reduce((a,v)=>a+v,0);
+     const gray=sum>0?(r*weights[0]+g*weights[3]+b*weights[5]+((r+g)/2)*(weights[1]+weights[2])+((g+b)/2)*weights[4]+((r+b)/2)*(weights[6]+weights[7]))/sum:y;
+     r=g=b=gray;
+   }
+   data[i]=Math.round(clamp(r)*255);data[i+1]=Math.round(clamp(g)*255);data[i+2]=Math.round(clamp(b)*255);
  }
  const map=[['GradationCurve','rgb'],['GradationCurveY','rgb'],['ToneCurvePV2012','rgb'],['ToneCurvePV2012Red','r'],['ToneCurvePV2012Green','g'],['ToneCurvePV2012Blue','b'],['GradationCurveRed','r'],['GradationCurveGreen','g'],['GradationCurveBlue','b']] as const;
  for(const [key,ch] of map){const points=style.curves[key];if(points?.length)applyCurveChannel(data,points,ch)}
- applyHsl(data,style.hsl); applyColorBalance(data,style.colorBalance);
+ if(!mono)applyHsl(data,style.hsl);
+ applyColorBalance(data,style.colorBalance);
 }
