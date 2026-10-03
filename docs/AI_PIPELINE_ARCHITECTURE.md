@@ -16,7 +16,13 @@ Photo AI Editor is a browser-first, non-destructive batch editor. The target wor
 
 Recommended render order: decode original → technical correction → creative grade → optional retouch → encode output. A vendor that returns a baked creative look must not be treated as a neutralization provider.
 
-## Local image diagnostics\n\nThe backend exposes `POST /api/images/analyze` for JPEG, PNG and WEBP uploads. It validates format, byte size (25 MB) and pixel dimensions (80 MP), downsamples to a bounded analysis image, and reports luminance percentiles, near-black/near-white fractions and RGB channel means. These are diagnostic measurements only: they do not prescribe white balance, claim AI inference, alter pixels, or recover clipped JPEG data.\n\nThe companion `POST /api/images/estimate` endpoint converts those measurements into conservative, editable starting values for exposure, highlights and shadows. It deliberately leaves temperature/tint unchanged, marks estimates as unapplied, and returns low confidence plus warnings because global statistics cannot distinguish intentional lighting or scene composition. These heuristics are a baseline for review, not an AI model or final correction.\n\n## Provider architecture
+## Local image diagnostics
+
+The backend exposes `POST /api/images/analyze` for JPEG, PNG and WEBP uploads. It validates format, byte size (25 MB) and pixel dimensions (80 MP), downsamples to a bounded analysis image, and reports luminance percentiles, near-black/near-white fractions and RGB channel means. These are diagnostic measurements only: they do not prescribe white balance, claim AI inference, alter pixels, or recover clipped JPEG data.
+
+The companion `POST /api/images/estimate` endpoint converts those measurements into conservative, editable starting values for exposure, highlights and shadows. It deliberately leaves temperature/tint unchanged, marks estimates as unapplied, and returns low confidence plus warnings because global statistics cannot distinguish intentional lighting or scene composition. These heuristics are a baseline for review, not an AI model or final correction. The browser editor can request this estimate for the selected original, apply the suggested exposure to its editable controls, and render suggested highlights/shadows as separate tonal adjustments. The frontend accepts `VITE_API_BASE` for the backend origin (default `http://localhost:8000`).
+
+## Provider architecture
 
 React should call Photo's own FastAPI endpoints, never a vendor directly. Backend provider adapters translate Photo's stable internal contract into vendor-specific calls. Keep credentials server-side. A conceptual interface:
 
@@ -51,7 +57,7 @@ Vendor feature claims are not independent quality evidence. Record user reports 
 
 ## Implementation sequence
 
-**A. Stabilize local editor:** immutable originals; project serialization; shared render function for preview/export; ZIP batch export plus manifest; explicit stage toggles.
+**A. Stabilize local editor:** immutable originals; project serialization; shared render function for preview/export; ZIP batch export plus manifest; explicit stage toggles. The current preview/export renderer now applies manual exposure, contrast, saturation, warmth, highlights and shadows in that order before the supported creative preset operations.
 
 **B. Improve local analysis:** retain current luminance metrics as diagnostics, not AI truth; add luminance percentiles, clipping estimates and color-cast hints with confidence; avoid automatic removal of warm ambient light.
 
@@ -71,4 +77,4 @@ Vendor feature claims are not independent quality evidence. Record user reports 
 
 ## Current repository state
 
-The backend exposes bounded diagnostics at `POST /api/images/analyze` and conservative editable starting estimates at `POST /api/images/estimate`; tests cover synthetic statistics, estimate bounds/semantics and input validation, but have not yet been executed. The repository contains a React/Vite frontend with local object-URL loading, canvas preview and PNG export; basic luminance heuristics; XMP/.costyle parsing; and a FastAPI health endpoint. README states external AI calls are not connected. KIE.ai environment placeholders are not proof of a suitable neutralization API. Do not present provider integration as live until implemented and exercised.
+The backend exposes bounded diagnostics at `POST /api/images/analyze` and conservative editable starting estimates at `POST /api/images/estimate`; tests cover synthetic statistics, estimate bounds/semantics and input validation, but have not yet been executed. The repository contains a React/Vite frontend with local object-URL loading, canvas preview and PNG export; basic luminance heuristics; XMP/.costyle parsing; and a FastAPI health endpoint. The frontend is connected to `/api/images/estimate`, exposes editable exposure/highlights/shadows controls, and supports configuring the backend origin with `VITE_API_BASE`. README states external AI calls are not connected. KIE.ai environment placeholders are not proof of a suitable neutralization API. Do not present provider integration as live until implemented and exercised.
