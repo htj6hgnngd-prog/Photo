@@ -16,7 +16,7 @@ Photo AI Editor is a browser-first, non-destructive batch editor. The target wor
 
 Recommended render order: decode original → technical correction → creative grade → optional retouch → encode output. A vendor that returns a baked creative look must not be treated as a neutralization provider.
 
-## Provider architecture
+## Local image diagnostics\n\nThe backend exposes `POST /api/images/analyze` for JPEG, PNG and WEBP uploads. It validates format, byte size (25 MB) and pixel dimensions (80 MP), downsamples to a bounded analysis image, and reports luminance percentiles, near-black/near-white fractions and RGB channel means. These are diagnostic measurements only: they do not prescribe white balance, claim AI inference, alter pixels, or recover clipped JPEG data.\n\n## Provider architecture
 
 React should call Photo's own FastAPI endpoints, never a vendor directly. Backend provider adapters translate Photo's stable internal contract into vendor-specific calls. Keep credentials server-side. A conceptual interface:
 
@@ -71,4 +71,4 @@ Vendor feature claims are not independent quality evidence. Record user reports 
 
 ## Current repository state
 
-The repository currently contains a React/Vite frontend with local object-URL loading, canvas preview and PNG export; basic luminance heuristics; XMP/.costyle parsing; and a FastAPI health endpoint. README states external AI calls are not connected. KIE.ai environment placeholders are not proof of a suitable neutralization API. Do not present provider integration as live until implemented and exercised.
+The backend now also exposes bounded local image diagnostics at `POST /api/images/analyze`; unit tests cover synthetic-image statistics and input validation, but have not yet been executed in CI. The repository contains a React/Vite frontend with local object-URL loading, canvas preview and PNG export; basic luminance heuristics; XMP/.costyle parsing; and a FastAPI health endpoint. README states external AI calls are not connected. KIE.ai environment placeholders are not proof of a suitable neutralization API. Do not present provider integration as live until implemented and exercised.
