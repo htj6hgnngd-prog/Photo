@@ -55,7 +55,7 @@ export function applyPresetStyle(data:Uint8ClampedArray, style:{params:Record<st
  const mono=/^(true|1|yes)$/i.test(p.ConvertToGrayscale||p.Monochrome||'') || Number(p.Saturation)<=-99;
  if(mono){
   const keys=['GrayMixerRed','GrayMixerOrange','GrayMixerYellow','GrayMixerGreen','GrayMixerAqua','GrayMixerBlue','GrayMixerPurple','GrayMixerMagenta'];
-  const weights=keys.map(k=>Number.isFinite(Number(p[k]))?Number(p[k]):({GrayMixerRed:40,GrayMixerOrange:60,GrayMixerYellow: yellowDefault,GrayMixerGreen:40,GrayMixerAqua:60,GrayMixerBlue:20,GrayMixerPurple:20,GrayMixerMagenta:40} as Record<string,number>)[k]??0);
+  const weights=keys.map(k=>Number.isFinite(Number(p[k]))?Number(p[k]):({GrayMixerRed:40,GrayMixerOrange:60,GrayMixerYellow: 60,GrayMixerGreen:40,GrayMixerAqua:60,GrayMixerBlue:20,GrayMixerPurple:20,GrayMixerMagenta:40} as Record<string,number>)[k]??0);
   const total=weights.reduce((a,b)=>a+b,0);
   for(let i=0;i<data.length;i+=4){const r=data[i],g=data[i+1],b=data[i+2];let y;if(total>0)y=(r*weights[0]+g*weights[3]+b*weights[5]+((r+g)/2)*weights[1]+((r+g)/2)*weights[2]+((g+b)/2)*weights[4]+((r+b)/2)*weights[6]+((r+b)/2)*weights[7])/total;else y=.2126*r+.7152*g+.0722*b;data[i]=data[i+1]=data[i+2]=Math.max(0,Math.min(255,y));}
  }
