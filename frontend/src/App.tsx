@@ -31,9 +31,10 @@ export default function App() {
     const image=new Image(); image.onload=()=>{
       canvas.width=image.naturalWidth; canvas.height=image.naturalHeight;
       const ctx=canvas.getContext('2d',{willReadFrequently:true}); if(!ctx)return;
-      ctx.drawImage(image,0,0); const base=ctx.getImageData(0,0,canvas.width,canvas.height); renderManual(base.data,adjustments[current.id]||initial); ctx.putImageData(base,0,0);
+      ctx.drawImage(image,0,0);
       const style=appliedStyles[current.id];
-      if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);const map=[['GradationCurve','rgb'],['GradationCurveY','rgb'],['ToneCurvePV2012','rgb'],['ToneCurvePV2012Red','r'],['ToneCurvePV2012Green','g'],['ToneCurvePV2012Blue','b'],['GradationCurveY','rgb'],['GradationCurveRed','r'],['GradationCurveGreen','g'],['GradationCurveBlue','b']] as const;for(const [key,ch] of map){const points=style.curves[key];if(points?.length)applyCurveChannel(pixels.data,points,ch);}applyHsl(pixels.data,style.hsl);applyColorBalance(pixels.data,style.colorBalance);ctx.putImageData(pixels,0,0);}
+      if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);const map=[['GradationCurve','rgb'],['GradationCurveY','rgb'],['ToneCurvePV2012','rgb'],['ToneCurvePV2012Red','r'],['ToneCurvePV2012Green','g'],['ToneCurvePV2012Blue','b'],['GradationCurveRed','r'],['GradationCurveGreen','g'],['GradationCurveBlue','b']] as const;for(const [key,ch] of map){const points=style.curves[key];if(points?.length)applyCurveChannel(pixels.data,points,ch);}applyHsl(pixels.data,style.hsl);applyColorBalance(pixels.data,style.colorBalance);ctx.putImageData(pixels,0,0);}
+      const manual=ctx.getImageData(0,0,canvas.width,canvas.height);renderManual(manual.data,adjustments[current.id]||initial);ctx.putImageData(manual,0,0);
     };image.src=current.url;
   },[current,adjustments,appliedStyles]);
   async function importPresets(files: FileList | null) {
@@ -123,8 +124,9 @@ export default function App() {
         await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('Не удалось открыть ' + photo.name)); });
         const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
         const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('Canvas недоступен');
-        const a = adjustments[photo.id] || initial; ctx.drawImage(image, 0, 0); const base=ctx.getImageData(0,0,canvas.width,canvas.height); renderManual(base.data,a); ctx.putImageData(base,0,0);
+        const a = adjustments[photo.id] || initial; ctx.drawImage(image, 0, 0);
         const style=appliedStyles[photo.id]; if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height); const map=[['GradationCurve','rgb'],['GradationCurveY','rgb'],['ToneCurvePV2012','rgb'],['ToneCurvePV2012Red','r'],['ToneCurvePV2012Green','g'],['ToneCurvePV2012Blue','b'],['GradationCurveRed','r'],['GradationCurveGreen','g'],['GradationCurveBlue','b']] as const; for(const [key,ch] of map){const points=style.curves[key]; if(points?.length)applyCurveChannel(pixels.data,points,ch);} applyHsl(pixels.data,style.hsl); applyColorBalance(pixels.data,style.colorBalance); ctx.putImageData(pixels,0,0);}
+        const manual=ctx.getImageData(0,0,canvas.width,canvas.height);renderManual(manual.data,a);ctx.putImageData(manual,0,0);
         const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Не удалось обработать ' + photo.name)), 'image/png'));
         const url = URL.createObjectURL(blob); const link = document.createElement('a');
         link.href = url; link.download = photo.name.replace(/\.[^.]+$/, '') + '-edited.png';
