@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import JSZip from 'jszip';
-import { parseStyle, applyCurveChannel } from './presetEngine';
+import { parseStyle, applyCurveChannel, applyHsl, applyColorBalance } from './presetEngine';
 import { Aperture, Upload, Image as ImageIcon, SlidersHorizontal, ScanFace, WandSparkles, Download, RotateCcw, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 type Photo = { id: string; name: string; url: string; file: File };
@@ -108,7 +108,7 @@ export default function App() {
         const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
         const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('Canvas недоступен');
         const a = adjustments[photo.id] || initial; ctx.filter = `brightness(${Math.pow(2,a.exposure/100)}) contrast(${100+a.contrast}%) saturate(${100+a.saturation}%) sepia(${Math.max(0,a.warmth)/250}) hue-rotate(${Math.min(0,a.warmth)/2}deg)`; ctx.drawImage(image, 0, 0);
-        const style=appliedStyles[photo.id]; if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height); const map=[['GradationCurve','rgb'],['GradationCurveRed','r'],['GradationCurveGreen','g'],['GradationCurveBlue','b']] as const; for(const [key,ch] of map){const points=style.curves[key]; if(points?.length)applyCurveChannel(pixels.data,points,ch);} ctx.putImageData(pixels,0,0);}
+        const style=appliedStyles[photo.id]; if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height); const map=[['GradationCurve','rgb'],['GradationCurveRed','r'],['GradationCurveGreen','g'],['GradationCurveBlue','b']] as const; for(const [key,ch] of map){const points=style.curves[key]; if(points?.length)applyCurveChannel(pixels.data,points,ch);} applyHsl(pixels.data,style.hsl); applyColorBalance(pixels.data,style.colorBalance); ctx.putImageData(pixels,0,0);}
         const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Не удалось обработать ' + photo.name)), 'image/png'));
         const url = URL.createObjectURL(blob); const link = document.createElement('a');
         link.href = url; link.download = photo.name.replace(/\.[^.]+$/, '') + '-edited.png';
