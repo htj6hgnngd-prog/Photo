@@ -124,21 +124,29 @@ export default function App() {
     if (!photos.length || exporting) return;
     setExporting(true);
     try {
+      const archive = new JSZip();
+      const usedNames = new Set<string>();
       for (const photo of photos) {
         const image = new Image(); image.src = photo.url;
         await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('Не удалось открыть ' + photo.name)); });
         const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
         const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('Canvas недоступен');
-        const a = adjustments[photo.id] || initial; ctx.drawImage(image, 0, 0);
-        const style=appliedStyles[photo.id]; if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height); const map=[['GradationCurve','rgb'],['GradationCurveY','rgb'],['ToneCurvePV2012','rgb'],['ToneCurvePV2012Red','r'],['ToneCurvePV2012Green','g'],['ToneCurvePV2012Blue','b'],['GradationCurveRed','r'],['GradationCurveGreen','g'],['GradationCurveBlue','b']] as const; for(const [key,ch] of map){const points=style.curves[key]; if(points?.length)applyCurveChannel(pixels.data,points,ch);} applyHsl(pixels.data,style.hsl); applyColorBalance(pixels.data,style.colorBalance); ctx.putImageData(pixels,0,0);}
-        const manual=ctx.getImageData(0,0,canvas.width,canvas.height);renderManual(manual.data,a);ctx.putImageData(manual,0,0);
+        ctx.drawImage(image, 0, 0);
+        const style=appliedStyles[photo.id];
+        const manual=ctx.getImageData(0,0,canvas.width,canvas.height);
+        renderManual(manual.data, adjustments[photo.id] || initial);
+        ctx.putImageData(manual,0,0);
+        if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);const map=[['GradationCurve','rgb'],['GradationCurveY','rgb'],['ToneCurvePV2012','rgb'],['ToneCurvePV2012Red','r'],['ToneCurvePV2012Green','g'],['ToneCurvePV2012Blue','b'],['GradationCurveRed','r'],['GradationCurveGreen','g'],['GradationCurveBlue','b']] as const;for(const [key,ch] of map){const points=style.curves[key];if(points?.length)applyCurveChannel(pixels.data,points,ch);}applyHsl(pixels.data,style.hsl);applyColorBalance(pixels.data,style.colorBalance);ctx.putImageData(pixels,0,0);}
         const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Не удалось обработать ' + photo.name)), 'image/png'));
-        const url = URL.createObjectURL(blob); const link = document.createElement('a');
-        link.href = url; link.download = photo.name.replace(/\.[^.]+$/, '') + '-edited.png';
-        document.body.appendChild(link); link.click(); link.remove();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-        await new Promise(resolve => window.setTimeout(resolve, 250));
+        const base=photo.name.replace(/\.[^.]+$/, '') + '-edited.png';
+        let filename=base, suffix=2;
+        while(usedNames.has(filename.toLowerCase())) filename=base.replace(/\.png$/i, '-' + suffix++ + '.png');
+        usedNames.add(filename.toLowerCase());
+        archive.file(filename,blob);
       }
+      archive.file('export-manifest.json',JSON.stringify({createdAt:new Date().toISOString(),count:photos.length,format:'PNG',items:photos.map(photo=>({source:photo.name,output:photo.name.replace(/\.[^.]+$/, '')+'-edited.png',style:appliedStyles[photo.id]?.name||null,adjustments:adjustments[photo.id]||initial}))},null,2));
+      const zip=await archive.generateAsync({type:'blob'});
+      const url=URL.createObjectURL(zip);const link=document.createElement('a');link.href=url;link.download='photo-edited-batch.zip';document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),3000);
     } catch (error) { alert(error instanceof Error ? error.message : 'Ошибка экспорта'); }
     finally { setExporting(false); }
   }
