@@ -9,6 +9,7 @@ type Preset = { id:string; name:string; family:string; source:string; params:Rec
 const initial: Adjustments = { exposure: 0, contrast: 0, saturation: 0, warmth: 0 };
 const bundledPresets: Preset[] = [{"id":"bundled-b-w","name":"B&W","family":"Lightroom / Camera Raw","source":"B&W.xmp","params":{"Temperature":"5500","Exposure2012":"0.15","Contrast2012":"-27","Saturation":"-100"},"adjustments":{"exposure":15,"contrast":-27,"saturation":-50,"warmth":0},"curves":{},"hsl":{},"colorBalance":{},"unsupportedParams":[],"colorCorrections":[],"format":"xmp"},{"id":"bundled-basic","name":"Basic","family":"Lightroom / Camera Raw","source":"Basic.xmp","params":{"Temperature":"5500","Exposure2012":"-0.20","Contrast2012":"-24","Saturation":"-29"},"adjustments":{"exposure":-20,"contrast":-24,"saturation":-29,"warmth":0},"curves":{},"hsl":{},"colorBalance":{},"unsupportedParams":[],"colorCorrections":[],"format":"xmp"},{"id":"bundled-basic-2","name":"Basic 2","family":"Lightroom / Camera Raw","source":"Basic 2.xmp","params":{"Temperature":"5850","Exposure2012":"0.00","Contrast2012":"-22","Saturation":"-24"},"adjustments":{"exposure":0,"contrast":-22,"saturation":-24,"warmth":14},"curves":{},"hsl":{},"colorBalance":{},"unsupportedParams":[],"colorCorrections":[],"format":"xmp"},{"id":"bundled-frappe","name":"Frappe","family":"Lightroom / Camera Raw","source":"Frappe.xmp","params":{"Temperature":"6793","Exposure2012":"-0.10","Contrast2012":"-31","Saturation":"-20"},"adjustments":{"exposure":-10,"contrast":-31,"saturation":-20,"warmth":51.72},"curves":{},"hsl":{},"colorBalance":{},"unsupportedParams":[],"colorCorrections":[],"format":"xmp"},{"id":"bundled-mocco","name":"Mocco","family":"Lightroom / Camera Raw","source":"Mocco.xmp","params":{"Temperature":"5450","Exposure2012":"-0.15","Contrast2012":"-61","Saturation":"0"},"adjustments":{"exposure":-15,"contrast":-50,"saturation":0,"warmth":-2},"curves":{},"hsl":{},"colorBalance":{},"unsupportedParams":[],"colorCorrections":[],"format":"xmp"}];
 
+function renderManual(data: Uint8ClampedArray, a: Adjustments) { const exposure=Math.pow(2,a.exposure/100), contrast=(259*(a.contrast*2.55+255))/(255*(259-a.contrast*2.55)), saturation=1+a.saturation/50, warmth=a.warmth*.45; for(let i=0;i<data.length;i+=4){let r=data[i]*exposure,g=data[i+1]*exposure,b=data[i+2]*exposure;r=(r-128)*contrast+128;g=(g-128)*contrast+128;b=(b-128)*contrast+128;const y=.2126*r+.7152*g+.0722*b;r=y+(r-y)*saturation+warmth;g=y+(g-y)*saturation;b=y+(b-y)*saturation-warmth;data[i]=Math.max(0,Math.min(255,r));data[i+1]=Math.max(0,Math.min(255,g));data[i+2]=Math.max(0,Math.min(255,b));} }
 export default function App() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [presets, setPresets] = useState<Preset[]>(bundledPresets);
@@ -30,11 +31,11 @@ export default function App() {
     const image=new Image(); image.onload=()=>{
       canvas.width=image.naturalWidth; canvas.height=image.naturalHeight;
       const ctx=canvas.getContext('2d',{willReadFrequently:true}); if(!ctx)return;
-      ctx.filter=filter;ctx.drawImage(image,0,0);ctx.filter='none';
+      ctx.drawImage(image,0,0); const base=ctx.getImageData(0,0,canvas.width,canvas.height); renderManual(base.data,adjustments[current.id]||initial); ctx.putImageData(base,0,0);
       const style=appliedStyles[current.id];
       if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);const map=[['GradationCurve','rgb'],['GradationCurveY','rgb'],['ToneCurvePV2012','rgb'],['ToneCurvePV2012Red','r'],['ToneCurvePV2012Green','g'],['ToneCurvePV2012Blue','b'],['GradationCurveY','rgb'],['GradationCurveRed','r'],['GradationCurveGreen','g'],['GradationCurveBlue','b']] as const;for(const [key,ch] of map){const points=style.curves[key];if(points?.length)applyCurveChannel(pixels.data,points,ch);}applyHsl(pixels.data,style.hsl);applyColorBalance(pixels.data,style.colorBalance);ctx.putImageData(pixels,0,0);}
     };image.src=current.url;
-  },[current,filter,appliedStyles]);
+  },[current,adjustments,appliedStyles]);
   async function importPresets(files: FileList | null) {
     if (!files) return;
     const parsed: Preset[] = [];
@@ -122,7 +123,7 @@ export default function App() {
         await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('Не удалось открыть ' + photo.name)); });
         const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
         const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('Canvas недоступен');
-        const a = adjustments[photo.id] || initial; ctx.filter = `brightness(${Math.pow(2,a.exposure/100)}) contrast(${100+a.contrast}%) saturate(${100+a.saturation}%) sepia(${Math.max(0,a.warmth)/250}) hue-rotate(${Math.min(0,a.warmth)/2}deg)`; ctx.drawImage(image, 0, 0);
+        const a = adjustments[photo.id] || initial; ctx.drawImage(image, 0, 0); const base=ctx.getImageData(0,0,canvas.width,canvas.height); renderManual(base.data,a); ctx.putImageData(base,0,0);
         const style=appliedStyles[photo.id]; if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height); const map=[['GradationCurve','rgb'],['GradationCurveY','rgb'],['ToneCurvePV2012','rgb'],['ToneCurvePV2012Red','r'],['ToneCurvePV2012Green','g'],['ToneCurvePV2012Blue','b'],['GradationCurveRed','r'],['GradationCurveGreen','g'],['GradationCurveBlue','b']] as const; for(const [key,ch] of map){const points=style.curves[key]; if(points?.length)applyCurveChannel(pixels.data,points,ch);} applyHsl(pixels.data,style.hsl); applyColorBalance(pixels.data,style.colorBalance); ctx.putImageData(pixels,0,0);}
         const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Не удалось обработать ' + photo.name)), 'image/png'));
         const url = URL.createObjectURL(blob); const link = document.createElement('a');
