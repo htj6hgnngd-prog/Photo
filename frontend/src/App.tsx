@@ -43,10 +43,10 @@ export default function App() {
         const archive = await JSZip.loadAsync(file);
         for (const [path, entry] of Object.entries(archive.files)) {
           if (entry.dir || path.includes('__MACOSX/') || path.split('/').some(part=>part.startsWith('._'))) continue;
-          if (!/\\.(xmp|costyle)$/i.test(path)) continue;
+          if (!/\.(xmp|costyle)$/i.test(path)) continue;
           candidates.push(new File([await entry.async('blob')], path.split('/').pop() || 'preset.xmp'));
         }
-      } else if (/\\.(xmp|costyle)$/i.test(file.name)) candidates.push(file);
+      } else if (/\.(xmp|costyle)$/i.test(file.name)) candidates.push(file);
     }
     for (const file of candidates) {
       const ext = file.name.toLowerCase().split('.').pop();
