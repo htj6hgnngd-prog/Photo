@@ -101,7 +101,7 @@ export default function App() {
   }
   function applyPreset(preset:Preset) {
     if (!current) return;
-    setAdjustments(prev=>({...prev,[current.id]:preset.adjustments})); setAppliedStyles(prev=>({...prev,[current.id]:preset}));
+    setAppliedStyles(prev=>({...prev,[current.id]:preset}));
   }
   function addFiles(files: FileList | null) {
     if (!files) return;
