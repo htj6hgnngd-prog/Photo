@@ -5,7 +5,18 @@ function curve(value?:string):CurvePoint[] { if(!value)return []; return value.s
 export function parseStyle(source:string,filename:string):ParsedStyle {
  const format=filename.toLowerCase().endsWith('.costyle')?'costyle':'xmp';
  const params:Record<string,string>={};
- if(format==='costyle') for(const m of source.matchAll(/<E\s+K="([^"]+)"\s+V="([^"]*)"\s*\/>/g))params[m[1]]=m[2];
+ if(typeof DOMParser!=='undefined'){
+   const doc=new DOMParser().parseFromString(source,'application/xml');
+   for(const node of Array.from(doc.getElementsByTagName('*'))){
+     if(format==='costyle'&&(node.localName||node.nodeName.split(':').pop())==='E'){
+       const key=node.getAttribute('K'),value=node.getAttribute('V');if(key!==null&&value!==null)params[key]=value;
+     }
+     if(format==='xmp')for(const attr of Array.from(node.attributes||[])){
+       const key=attr.localName||attr.name.split(':').pop()||'';
+       if(attr.name.startsWith('crs:')||attr.namespaceURI==='http://ns.adobe.com/camera-raw-settings/1.0/')params[key]=attr.value;
+     }
+   }
+ }else if(format==='costyle')for(const m of source.matchAll(/<E\s+K="([^"]+)"\s+V="([^"]*)"\s*\/>/g))params[m[1]]=m[2];
  else for(const m of source.matchAll(/crs:([A-Za-z0-9]+)="([^"]*)"/g))params[m[1]]=m[2];
  const curves:Record<string,CurvePoint[]>={};
  for(const [key,val] of Object.entries(params)) if(/^(GradationCurve|ToneCurve|.*Curve)/i.test(key)) { const pts=curve(val); if(pts.length>1)curves[key]=pts; }
