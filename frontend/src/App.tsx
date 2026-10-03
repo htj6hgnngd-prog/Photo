@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import JSZip from 'jszip';
-import { parseStyle, applyCurveChannel, applyHsl, applyColorBalance } from './presetEngine';
+import { parseStyle, applyPresetStyle } from './presetEngine';
 import { Aperture, Upload, Image as ImageIcon, SlidersHorizontal, ScanFace, WandSparkles, Download, RotateCcw, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 type Photo = { id: string; name: string; url: string; file: File };
