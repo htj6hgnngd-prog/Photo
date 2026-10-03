@@ -28,14 +28,19 @@ export default function App() {
   useEffect(() => {
     const canvas=previewCanvasRef.current;
     if(!canvas||!current)return;
-    const image=new Image(); image.onload=()=>{
+    let cancelled=false;
+    const image=new Image();
+    image.onload=()=>{
+      if(cancelled)return;
       canvas.width=image.naturalWidth; canvas.height=image.naturalHeight;
       const ctx=canvas.getContext('2d',{willReadFrequently:true}); if(!ctx)return;
       ctx.drawImage(image,0,0);
       const style=appliedStyles[current.id];
       if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);const map=[['GradationCurve','rgb'],['GradationCurveY','rgb'],['ToneCurvePV2012','rgb'],['ToneCurvePV2012Red','r'],['ToneCurvePV2012Green','g'],['ToneCurvePV2012Blue','b'],['GradationCurveRed','r'],['GradationCurveGreen','g'],['GradationCurveBlue','b']] as const;for(const [key,ch] of map){const points=style.curves[key];if(points?.length)applyCurveChannel(pixels.data,points,ch);}applyHsl(pixels.data,style.hsl);applyColorBalance(pixels.data,style.colorBalance);ctx.putImageData(pixels,0,0);}
       const manual=ctx.getImageData(0,0,canvas.width,canvas.height);renderManual(manual.data,adjustments[current.id]||initial);ctx.putImageData(manual,0,0);
-    };image.src=current.url;
+    };
+    image.src=current.url;
+    return ()=>{cancelled=true;image.onload=null;};
   },[current,adjustments,appliedStyles]);
   async function importPresets(files: FileList | null) {
     if (!files) return;
