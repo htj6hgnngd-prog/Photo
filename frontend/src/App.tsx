@@ -10,7 +10,8 @@ const initial: Adjustments = { exposure: 0, contrast: 0, saturation: 0, warmth: 
 
 export default function App() {
   const [photos, setPhotos] = useState<Photo[]>([]);
-  const [presets, setPresets] = useState<Preset[]>([]);\n  const [appliedStyles,setAppliedStyles] = useState<Record<string,Preset>>({});
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const [appliedStyles,setAppliedStyles] = useState<Record<string,Preset>>({});
   const presetInputRef = useRef<HTMLInputElement>(null);
   const [active, setActive] = useState(0);
   const [adjustments, setAdjustments] = useState<Record<string, Adjustments>>({});
@@ -48,7 +49,9 @@ export default function App() {
         for (const match of source.matchAll(/crs:([A-Za-z0-9]+)="([^"]*)"/g)) params[match[1]] = match[2];
         name = params.Name || params.PresetName || name;
       }
-      const structured = parseStyle(source,file.name);\n      Object.assign(params, structured.params);\n      const num = (key:string, fallback=0) => { const value=Number(params[key]); return Number.isFinite(value)?value:fallback; };
+      const structured = parseStyle(source,file.name);
+      Object.assign(params, structured.params);
+      const num = (key:string, fallback=0) => { const value=Number(params[key]); return Number.isFinite(value)?value:fallback; };
       const isC1=ext==='costyle';
       const exposure=isC1?num('Exposure')*100:num('Exposure2012')*100;
       const contrast=isC1?num('Contrast'):num('Contrast2012');
