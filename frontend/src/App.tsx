@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import JSZip from 'jszip';
+import { builtinPresets } from './builtinPresets';
 import { Aperture, Upload, Image as ImageIcon, SlidersHorizontal, ScanFace, WandSparkles, Download, RotateCcw, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 type Photo = { id: string; name: string; url: string; file: File };
@@ -9,7 +10,7 @@ const initial: Adjustments = { exposure: 0, contrast: 0, saturation: 0, warmth: 
 
 export default function App() {
   const [photos, setPhotos] = useState<Photo[]>([]);
-  const [presets, setPresets] = useState<Preset[]>([]);
+  const [presets, setPresets] = useState<Preset[]>(builtinPresets);
   const presetInputRef = useRef<HTMLInputElement>(null);
   const [active, setActive] = useState(0);
   const [adjustments, setAdjustments] = useState<Record<string, Adjustments>>({});
