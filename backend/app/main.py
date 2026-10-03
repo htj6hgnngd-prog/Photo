@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .providers import provider_status
+
 app = FastAPI(title="Photo AI Editor API", version="0.1.0")
 
 app.add_middleware(
@@ -11,6 +13,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "photo-ai-editor", "version": "0.1.0"}
+
+
+@app.get("/api/providers/neutralization")
+def neutralization_provider_status():
+    """Expose configured neutralization capability without claiming AI is live."""
+    return provider_status()
