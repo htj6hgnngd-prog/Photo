@@ -49,3 +49,49 @@ function rgbToHsl(r:number,g:number,b:number):[number,number,number]{r/=255;g/=2
 function hslToRgb(h:number,s:number,l:number):[number,number,number]{h=((h%360)+360)%360;const c=(1-Math.abs(2*l-1))*s,x=c*(1-Math.abs((h/60)%2-1)),m=l-c/2;const q=h<60?[c,x,0]:h<120?[x,c,0]:h<180?[0,c,x]:h<240?[0,x,c]:h<300?[x,0,c]:[c,0,x];return q.map(v=>Math.round((v+m)*255)) as [number,number,number]}
 export function applyHsl(data:Uint8ClampedArray,hsl:ParsedStyle['hsl']):void{const entries=Object.entries(hsl);if(!entries.length)return;for(let i=0;i<data.length;i+=4){const [h,s,l]=rgbToHsl(data[i],data[i+1],data[i+2]);let dh=0,ds=0,dl=0,total=0;for(const [name,a] of entries){const center=hueCenters[name];if(center===undefined)continue;const delta=Math.abs(((h-center+540)%360)-180),w=Math.exp(-0.5*(delta/28)**2);dh+=a.h*w;ds+=a.s*w;dl+=a.l*w;total=Math.max(total,w)}if(total>0){const rgb=hslToRgb(h+dh,clamp(s+ds/100),clamp(l+dl/100));data[i]=rgb[0];data[i+1]=rgb[1];data[i+2]=rgb[2]}}}
 export function applyColorBalance(data:Uint8ClampedArray,balance:ParsedStyle['colorBalance']):void{const zones=[['ColorBalanceShadow',0],['ColorBalanceMidtone',1],['ColorBalanceHighlight',2]] as const;for(let i=0;i<data.length;i+=4){const y=(.2126*data[i]+.7152*data[i+1]+.0722*data[i+2])/255;const weights=[Math.max(0,1-y*2),Math.max(0,1-Math.abs(y-.5)*2),Math.max(0,(y-.5)*2)];let sums=[0,0,0],ws=0;for(let z=0;z<3;z++){const vals=balance[zones[z][0]];if(!vals||vals.length<3)continue;for(let c=0;c<3;c++)sums[c]+=(vals[c]-1)*weights[z];ws+=weights[z]}if(ws)for(let c=0;c<3;c++)data[i+c]=Math.round(clamp(data[i+c]/255*(1+sums[c]/ws))*255)}}
+
+export function applyPresetStyle(data:Uint8ClampedArray, style:{params:Record<string,string>;curves:Record<string,CurvePoint[]>;hsl:ParsedStyle['hsl'];colorBalance:ParsedStyle['colorBalance']}):void {
+ const p=style.params;
+ const num=(keys:string[],fallback=0)=>{for(const k of keys){if(p[k]!==undefined&&p[k].trim()!==""){const n=Number(p[k]);if(Number.isFinite(n))return n;}}return fallback};
+ const truth=(v:string|undefined)=>/^(true|1|yes)$/i.test(v||"");
+ const mono=truth(p.ConvertToGrayscale)||truth(p.Monochrome)||num(['Saturation'])<=-99;
+ const exposure=Math.pow(2,num(['Exposure2012','Exposure']) );
+ const contrast=1+num(['Contrast2012','Contrast'])/100;
+ const saturation=mono?0:1+num(['Saturation'])/100;
+ const highlights=num(['Highlights2012','Highlights'])/100, shadows=num(['Shadows2012','Shadows'])/100, whites=num(['Whites2012','Whites'])/100, blacks=num(['Blacks2012','Blacks'])/100;
+ const temp=num(['Temperature'],5500);
+ const warmth=p.Temperature===undefined?0:clamp((temp-5500)/250,-2,2)*7;
+ const inputBlack=num(['InputBlack','LevelsInputBlack'],0), inputWhite=num(['InputWhite','LevelsInputWhite'],255);
+ const outputBlack=num(['OutputBlack','LevelsOutputBlack'],0), outputWhite=num(['OutputWhite','LevelsOutputWhite'],255);
+ const black=clamp(inputBlack/255,0,0.998), white=clamp(inputWhite/255,black+0.002,1);
+ const outB=clamp(outputBlack/255), outW=clamp(outputWhite/255);
+ const grayKeys=['GrayMixerRed','GrayMixerOrange','GrayMixerYellow','GrayMixerGreen','GrayMixerAqua','GrayMixerBlue','GrayMixerPurple','GrayMixerMagenta'];
+ const defaultWeights=[40,60,60,40,60,20,20,40];
+ const weights=grayKeys.map((k,i)=>num([k],defaultWeights[i]));
+ for(let i=0;i<data.length;i+=4){
+   let r=data[i]/255,g=data[i+1]/255,b=data[i+2]/255;
+   r=clamp((r-black)/(white-black))* (outW-outB)+outB;
+   g=clamp((g-black)/(white-black))* (outW-outB)+outB;
+   b=clamp((b-black)/(white-black))* (outW-outB)+outB;
+   r*=exposure;g*=exposure;b*=exposure;
+   r=(r-.5)*contrast+.5;g=(g-.5)*contrast+.5;b=(b-.5)*contrast+.5;
+   const preY=.2126*r+.7152*g+.0722*b, lum=clamp(preY);
+   const shadowMask=Math.pow(1-lum,2), highlightMask=Math.pow(lum,2), whiteMask=Math.pow(lum,4), blackMask=Math.pow(1-lum,4);
+   const tonal=shadows*.22*shadowMask+highlights*.22*highlightMask+whites*.16*whiteMask+blacks*.16*blackMask;
+   r+=tonal;g+=tonal;b+=tonal;
+   const y=.2126*r+.7152*g+.0722*b;
+   r=y+(r-y)*saturation+warmth/255;
+   g=y+(g-y)*saturation;
+   b=y+(b-y)*saturation-warmth/255;
+   if(mono){
+     const sum=weights.reduce((a,v)=>a+v,0);
+     const gray=sum>0?(r*weights[0]+g*weights[3]+b*weights[5]+((r+g)/2)*(weights[1]+weights[2])+((g+b)/2)*weights[4]+((r+b)/2)*(weights[6]+weights[7]))/sum:y;
+     r=g=b=gray;
+   }
+   data[i]=Math.round(clamp(r)*255);data[i+1]=Math.round(clamp(g)*255);data[i+2]=Math.round(clamp(b)*255);
+ }
+ const map=[['GradationCurve','rgb'],['GradationCurveY','rgb'],['ToneCurvePV2012','rgb'],['ToneCurvePV2012Red','r'],['ToneCurvePV2012Green','g'],['ToneCurvePV2012Blue','b'],['GradationCurveRed','r'],['GradationCurveGreen','g'],['GradationCurveBlue','b']] as const;
+ for(const [key,ch] of map){const points=style.curves[key];if(points?.length)applyCurveChannel(data,points,ch)}
+ if(!mono)applyHsl(data,style.hsl);
+ applyColorBalance(data,style.colorBalance);
+}

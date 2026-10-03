@@ -1,15 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
 import JSZip from 'jszip';
-import { parseStyle, applyCurveChannel, applyHsl, applyColorBalance } from './presetEngine';
+import { parseStyle, applyPresetStyle } from './presetEngine';
 import { Aperture, Upload, Image as ImageIcon, SlidersHorizontal, ScanFace, WandSparkles, Download, RotateCcw, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 type Photo = { id: string; name: string; url: string; file: File };
-type Adjustments = { exposure: number; contrast: number; saturation: number; warmth: number };
+type Adjustments = { exposure: number; contrast: number; saturation: number; warmth: number; highlights?: number; shadows?: number };
 type Preset = { id:string; name:string; family:string; source:string; params:Record<string,string>; adjustments:Adjustments; curves:Record<string,[number,number][]>; hsl:Record<string,{h:number;s:number;l:number}>; colorBalance:Record<string,number[]>; unsupportedParams:string[]; colorCorrections:string[][]; format:'xmp'|'costyle' };
-const initial: Adjustments = { exposure: 0, contrast: 0, saturation: 0, warmth: 0 };
+const initial: Adjustments = { exposure: 0, contrast: 0, saturation: 0, warmth: 0, highlights: 0, shadows: 0 };
 const bundledPresets: Preset[] = [{"id":"bundled-b-w","name":"B&W","family":"Lightroom / Camera Raw","source":"B&W.xmp","params":{"Temperature":"5500","Exposure2012":"0.15","Contrast2012":"-27","Saturation":"-100"},"adjustments":{"exposure":15,"contrast":-27,"saturation":-50,"warmth":0},"curves":{},"hsl":{},"colorBalance":{},"unsupportedParams":[],"colorCorrections":[],"format":"xmp"},{"id":"bundled-basic","name":"Basic","family":"Lightroom / Camera Raw","source":"Basic.xmp","params":{"Temperature":"5500","Exposure2012":"-0.20","Contrast2012":"-24","Saturation":"-29"},"adjustments":{"exposure":-20,"contrast":-24,"saturation":-29,"warmth":0},"curves":{},"hsl":{},"colorBalance":{},"unsupportedParams":[],"colorCorrections":[],"format":"xmp"},{"id":"bundled-basic-2","name":"Basic 2","family":"Lightroom / Camera Raw","source":"Basic 2.xmp","params":{"Temperature":"5850","Exposure2012":"0.00","Contrast2012":"-22","Saturation":"-24"},"adjustments":{"exposure":0,"contrast":-22,"saturation":-24,"warmth":14},"curves":{},"hsl":{},"colorBalance":{},"unsupportedParams":[],"colorCorrections":[],"format":"xmp"},{"id":"bundled-frappe","name":"Frappe","family":"Lightroom / Camera Raw","source":"Frappe.xmp","params":{"Temperature":"6793","Exposure2012":"-0.10","Contrast2012":"-31","Saturation":"-20"},"adjustments":{"exposure":-10,"contrast":-31,"saturation":-20,"warmth":51.72},"curves":{},"hsl":{},"colorBalance":{},"unsupportedParams":[],"colorCorrections":[],"format":"xmp"},{"id":"bundled-mocco","name":"Mocco","family":"Lightroom / Camera Raw","source":"Mocco.xmp","params":{"Temperature":"5450","Exposure2012":"-0.15","Contrast2012":"-61","Saturation":"0"},"adjustments":{"exposure":-15,"contrast":-50,"saturation":0,"warmth":-2},"curves":{},"hsl":{},"colorBalance":{},"unsupportedParams":[],"colorCorrections":[],"format":"xmp"}];
 
-function renderManual(data: Uint8ClampedArray, a: Adjustments) { const exposure=Math.pow(2,a.exposure/100), contrast=1+a.contrast/100, saturation=1+a.saturation/100, warmth=a.warmth*.18; for(let i=0;i<data.length;i+=4){let r=data[i]*exposure,g=data[i+1]*exposure,b=data[i+2]*exposure;r=(r-128)*contrast+128;g=(g-128)*contrast+128;b=(b-128)*contrast+128;const y=.2126*r+.7152*g+.0722*b;r=y+(r-y)*saturation+warmth;g=y+(g-y)*saturation;b=y+(b-y)*saturation-warmth;data[i]=Math.max(0,Math.min(255,r));data[i+1]=Math.max(0,Math.min(255,g));data[i+2]=Math.max(0,Math.min(255,b));} }
+function renderManual(data: Uint8ClampedArray, a: Adjustments) {
+  const exposure=Math.pow(2,a.exposure/100), contrast=1+a.contrast/100, saturation=1+a.saturation/100, warmth=a.warmth*.18;
+  const highlights=(a.highlights||0)/100, shadows=(a.shadows||0)/100;
+  for(let i=0;i<data.length;i+=4){
+    let r=data[i]*exposure,g=data[i+1]*exposure,b=data[i+2]*exposure;
+    r=(r-128)*contrast+128;g=(g-128)*contrast+128;b=(b-128)*contrast+128;
+    const y=.2126*r+.7152*g+.0722*b, l=Math.max(0,Math.min(1,y/255));
+    const shadowMask=Math.pow(1-l,2), highlightMask=Math.pow(l,2);
+    const tonalDelta=shadows*55*shadowMask+highlights*55*highlightMask;
+    r+=tonalDelta;g+=tonalDelta;b+=tonalDelta;
+    const adjustedY=.2126*r+.7152*g+.0722*b;
+    r=adjustedY+(r-adjustedY)*saturation+warmth;g=adjustedY+(g-adjustedY)*saturation;b=adjustedY+(b-adjustedY)*saturation-warmth;
+    data[i]=Math.max(0,Math.min(255,r));data[i+1]=Math.max(0,Math.min(255,g));data[i+2]=Math.max(0,Math.min(255,b));
+  }
+}
 export default function App() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [presets, setPresets] = useState<Preset[]>(bundledPresets);
@@ -21,6 +35,8 @@ export default function App() {
   const [adjustments, setAdjustments] = useState<Record<string, Adjustments>>({});
   const [analysis, setAnalysis] = useState<Record<string, {brightness:number; contrast:number; clipped:number; recommendation:string}>>({});
   const [analyzing, setAnalyzing] = useState(false);
+  const [technicalEstimates, setTechnicalEstimates] = useState<Record<string, {exposure_ev:number;highlights:number;shadows:number;confidence:number;warnings:string[]}>>({});
+  const [estimating, setEstimating] = useState(false);
   const [exporting, setExporting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const current = photos[active];
@@ -35,9 +51,9 @@ export default function App() {
       canvas.width=image.naturalWidth; canvas.height=image.naturalHeight;
       const ctx=canvas.getContext('2d',{willReadFrequently:true}); if(!ctx)return;
       ctx.drawImage(image,0,0);
-      const style=appliedStyles[current.id];
-      if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);const map=[['GradationCurve','rgb'],['GradationCurveY','rgb'],['ToneCurvePV2012','rgb'],['ToneCurvePV2012Red','r'],['ToneCurvePV2012Green','g'],['ToneCurvePV2012Blue','b'],['GradationCurveRed','r'],['GradationCurveGreen','g'],['GradationCurveBlue','b']] as const;for(const [key,ch] of map){const points=style.curves[key];if(points?.length)applyCurveChannel(pixels.data,points,ch);}applyHsl(pixels.data,style.hsl);applyColorBalance(pixels.data,style.colorBalance);ctx.putImageData(pixels,0,0);}
       const manual=ctx.getImageData(0,0,canvas.width,canvas.height);renderManual(manual.data,adjustments[current.id]||initial);ctx.putImageData(manual,0,0);
+      const style=appliedStyles[current.id];
+      if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);applyPresetStyle(pixels.data,style);ctx.putImageData(pixels,0,0);}
     };
     image.src=current.url;
     return ()=>{cancelled=true;image.onload=null;};
@@ -78,14 +94,14 @@ export default function App() {
       const contrast=isC1?num('Contrast'):num('Contrast2012');
       const saturation=isC1?num('Saturation'):num('Saturation');
       const warmth=isC1?num('Temperature')===0?0:(num('Temperature')-5500)/25:(num('Temperature')===0?0:(num('Temperature')-5500)/25);
-      const supported=new Set(['Exposure','Exposure2012','Contrast','Contrast2012','Saturation','Temperature','Name','PresetName','GradationCurve','GradationCurveY','GradationCurveRed','GradationCurveGreen','GradationCurveBlue','ToneCurvePV2012','ToneCurvePV2012Red','ToneCurvePV2012Green','ToneCurvePV2012Blue','ColorBalanceShadow','ColorBalanceMidtone','ColorBalanceHighlight']); for(const channel of ['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'])for(const kind of ['Hue','Saturation','Luminance'])supported.add(kind+'Adjustment'+channel); const unsupportedParams=Object.keys(params).filter(key=>!supported.has(key)&&!Object.keys(structured.curves).includes(key));
+      const supported=new Set(['Exposure','Exposure2012','Contrast','Contrast2012','Saturation','Temperature','Tint','Name','PresetName','ConvertToGrayscale','Monochrome','InputBlack','InputWhite','OutputBlack','OutputWhite','LevelsInputBlack','LevelsInputWhite','LevelsOutputBlack','LevelsOutputWhite','Highlights','Highlights2012','Shadows','Shadows2012','Whites','Whites2012','Blacks','Blacks2012','GradationCurve','GradationCurveY','GradationCurveRed','GradationCurveGreen','GradationCurveBlue','ToneCurvePV2012','ToneCurvePV2012Red','ToneCurvePV2012Green','ToneCurvePV2012Blue','ColorBalanceShadow','ColorBalanceMidtone','ColorBalanceHighlight']); for(const channel of ['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta']){for(const kind of ['Hue','Saturation','Luminance'])supported.add(kind+'Adjustment'+channel);supported.add('GrayMixer'+channel)} const unsupportedParams=Object.keys(params).filter(key=>!supported.has(key)&&!Object.keys(structured.curves).includes(key));
       parsed.push({id:file.name+'-'+file.size+'-'+file.lastModified,name,family:isC1?'Capture One':'Lightroom / Camera Raw',source:file.name,params,curves:structured.curves,hsl:structured.hsl,colorBalance:structured.colorBalance,colorCorrections:structured.colorCorrections,unsupportedParams,format:structured.format,adjustments:{exposure:Math.max(-100,Math.min(100,exposure)),contrast:Math.max(-50,Math.min(50,contrast)),saturation:Math.max(-50,Math.min(50,saturation)),warmth:Math.max(-100,Math.min(100,warmth))}});
     }
     setPresets(prev=>{const merged=[...prev,...parsed.filter(p=>!prev.some(old=>old.id===p.id))];try{window.localStorage.setItem('photo-editor-presets-v1',JSON.stringify(merged.filter(p=>!p.id.startsWith('bundled-'))));}catch{alert('Не удалось сохранить всю библиотеку пресетов на этом устройстве. Попробуйте импортировать меньшие ZIP-архивы.');}return merged;});
   }
   function applyPreset(preset:Preset) {
     if (!current) return;
-    setAdjustments(prev=>({...prev,[current.id]:preset.adjustments})); setAppliedStyles(prev=>({...prev,[current.id]:preset}));
+    setAppliedStyles(prev=>({...prev,[current.id]:preset}));
   }
   function addFiles(files: FileList | null) {
     if (!files) return;
@@ -120,25 +136,58 @@ export default function App() {
     finally { setAnalyzing(false); }
   }
 
+  async function estimateCurrent() {
+    if (!current || estimating) return;
+    setEstimating(true);
+    try {
+      const form = new FormData();
+      form.append('file', current.file);
+      const response = await fetch((import.meta.env.VITE_API_BASE || 'http://localhost:8000') + '/api/images/estimate', { method: 'POST', body: form });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.detail || 'Не удалось получить техническую оценку');
+      }
+      const result = await response.json();
+      const values = result.adjustments;
+      setTechnicalEstimates(prev => ({ ...prev, [current.id]: {
+        exposure_ev: values.exposure_ev, highlights: values.highlights,
+        shadows: values.shadows, confidence: result.confidence, warnings: result.warnings || []
+      }}));
+      setAdjustments(prev => ({ ...prev, [current.id]: { ...(prev[current.id] || initial), exposure: Math.max(-100, Math.min(100, Math.round(values.exposure_ev * 100))), highlights: values.highlights, shadows: values.shadows } }));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Ошибка технической оценки. Убедитесь, что backend запущен.');
+    } finally { setEstimating(false); }
+  }
+
   async function exportBatch() {
     if (!photos.length || exporting) return;
     setExporting(true);
     try {
+      const archive = new JSZip();
+      const usedNames = new Set<string>();
+      const manifestItems: Array<{source:string;output:string;style:string|null;adjustments:Adjustments}> = [];
       for (const photo of photos) {
         const image = new Image(); image.src = photo.url;
         await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('Не удалось открыть ' + photo.name)); });
         const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
         const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('Canvas недоступен');
-        const a = adjustments[photo.id] || initial; ctx.drawImage(image, 0, 0);
-        const style=appliedStyles[photo.id]; if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height); const map=[['GradationCurve','rgb'],['GradationCurveY','rgb'],['ToneCurvePV2012','rgb'],['ToneCurvePV2012Red','r'],['ToneCurvePV2012Green','g'],['ToneCurvePV2012Blue','b'],['GradationCurveRed','r'],['GradationCurveGreen','g'],['GradationCurveBlue','b']] as const; for(const [key,ch] of map){const points=style.curves[key]; if(points?.length)applyCurveChannel(pixels.data,points,ch);} applyHsl(pixels.data,style.hsl); applyColorBalance(pixels.data,style.colorBalance); ctx.putImageData(pixels,0,0);}
-        const manual=ctx.getImageData(0,0,canvas.width,canvas.height);renderManual(manual.data,a);ctx.putImageData(manual,0,0);
+        ctx.drawImage(image, 0, 0);
+        const style=appliedStyles[photo.id];
+        const manual=ctx.getImageData(0,0,canvas.width,canvas.height);
+        renderManual(manual.data, adjustments[photo.id] || initial);
+        ctx.putImageData(manual,0,0);
+        if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);applyPresetStyle(pixels.data,style);ctx.putImageData(pixels,0,0);}
         const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Не удалось обработать ' + photo.name)), 'image/png'));
-        const url = URL.createObjectURL(blob); const link = document.createElement('a');
-        link.href = url; link.download = photo.name.replace(/\.[^.]+$/, '') + '-edited.png';
-        document.body.appendChild(link); link.click(); link.remove();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-        await new Promise(resolve => window.setTimeout(resolve, 250));
+        const base=photo.name.replace(/\.[^.]+$/, '') + '-edited.png';
+        let filename=base, suffix=2;
+        while(usedNames.has(filename.toLowerCase())) filename=base.replace(/\.png$/i, '-' + suffix++ + '.png');
+        usedNames.add(filename.toLowerCase());
+        archive.file(filename,blob, {compression:'STORE'});
+        manifestItems.push({source:photo.name,output:filename,style:style?.name||null,adjustments:adjustments[photo.id]||initial});
       }
+      archive.file('export-manifest.json',JSON.stringify({createdAt:new Date().toISOString(),count:manifestItems.length,format:'PNG',items:manifestItems},null,2));
+      const zip=await archive.generateAsync({type:'blob'});
+      const url=URL.createObjectURL(zip);const link=document.createElement('a');link.href=url;link.download='photo-edited-batch.zip';document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),3000);
     } catch (error) { alert(error instanceof Error ? error.message : 'Ошибка экспорта'); }
     finally { setExporting(false); }
   }
@@ -149,9 +198,9 @@ export default function App() {
       {photos.length === 0 ? <button className="dropzone" onClick={() => inputRef.current?.click()}><Upload size={22}/><b>Import photos</b><small>JPEG, PNG, WebP</small></button> : <div className="thumb-list">{photos.map((p,i)=><button key={p.id} className={`thumb ${i===active?'selected':''}`} onClick={()=>setActive(i)}><img src={p.url}/><span className="thumb-index">{String(i+1).padStart(2,'0')}</span><span className="thumb-name">{p.name}</span><span className="remove" onClick={e=>{e.stopPropagation();remove(p.id);}}><X size={13}/></span></button>)}</div>}
       <button className="add-more" onClick={()=>inputRef.current?.click()}><Upload size={14}/> Add images</button><input ref={inputRef} type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.bmp,.avif" multiple hidden onChange={e=>addFiles(e.target.files)}/><div className="library-foot"><span>SUPPORTED FORMATS</span><p>JPG · PNG · WEBP</p><p className="subtle">RAW support planned</p></div></aside>
       <section className="canvas-area"><div className="canvas-toolbar"><div className="crumb">PROJECT <span>/</span> {current ? current.name.toUpperCase() : 'NO IMAGE SELECTED'}</div><div className="view-controls"><span className="view-tag">FIT</span><span className="view-tag">100%</span></div></div><div className="canvas">{current ? <><div className="image-wrap"><canvas ref={previewCanvasRef} className="main-image" aria-label={current.name}/><div className="image-badge">PREVIEW · ADJUSTMENTS</div></div><div className="image-nav"><button disabled={active===0} onClick={()=>setActive(active-1)}><ChevronLeft size={16}/></button><span>{String(active+1).padStart(2,'0')} / {String(photos.length).padStart(2,'0')}</span><button disabled={active===photos.length-1} onClick={()=>setActive(active+1)}><ChevronRight size={16}/></button></div></> : <div className="empty"><div className="empty-icon"><ImageIcon size={28}/></div><h2>Your workspace is ready</h2><p>Import a set of images to start reviewing and adjusting your photo series.</p><button className="primary" onClick={()=>inputRef.current?.click()}><Upload size={15}/> Import photos</button><small>Start with JPEG, PNG or WebP files</small></div>}</div><div className="filmstrip">{photos.map((p,i)=><button key={p.id} className={i===active?'film-active':''} onClick={()=>setActive(i)}><img src={p.url}/></button>)}{photos.length>0&&<button className="film-add" onClick={()=>inputRef.current?.click()}><Upload size={15}/></button>}</div></section>
-      <aside className="inspector"><div className="section-head"><span>IMAGE WORKFLOW</span><span className="live">● LIVE</span></div><div className="workflow"><div className="step active"><span className="step-num">01</span><div><b>Image review</b><small>Import & select frames</small></div><span className="step-state">ACTIVE</span></div><div className={`step ${Object.keys(analysis).length?'active':''}`}><span className="step-num">02</span><div><b>Image Analysis</b><small>Brightness, contrast, clipping</small></div><span className="soon">{Object.keys(analysis).length?'DONE':'LOCAL'}</span></div><div className="step disabled"><span className="step-num">03</span><div><b>Neutralization</b><small>Technical base correction</small></div><span className="soon">SOON</span></div><div className="step disabled"><span className="step-num">04</span><div><b>Creative grade</b><small>Series-aware color profile</small></div><span className="soon">SOON</span></div><div className="step disabled"><span className="step-num">05</span><div><b>AI Retouch</b><small>Skin & detail refinement</small></div><span className="soon">SOON</span></div></div><div className="panel-title"><SlidersHorizontal size={15}/> MANUAL PREVIEW <button onClick={()=>resetCurrent()} title="Reset"><RotateCcw size={13}/></button></div>{([['exposure','Exposure',-100,100],['contrast','Contrast',-50,50],['saturation','Saturation',-50,50],['warmth','Warmth',-100,100]] as const).map(([key,label,min,max])=><div className="slider-row" key={key}><div className="slider-label"><span>{label}</span><span className="slider-value">{adjust[key]>0?'+':''}{adjust[key]}</span></div><input type="range" min={min} max={max} value={adjust[key]} disabled={!current} onChange={e=>setValue(key,Number(e.target.value))}/><div className="slider-scale"><span>{key==='exposure'?'−1 EV':key==='warmth'?'Cool':'−'}</span><span>{key==='exposure'?'+1 EV':key==='warmth'?'Warm':'+'}</span></div></div>)}<div className="panel-title"><WandSparkles size={15}/> PRESET LIBRARY <button onClick={()=>presetInputRef.current?.click()} title="Import XMP or Capture One styles"><Upload size={13}/></button></div>
+      <aside className="inspector"><div className="section-head"><span>IMAGE WORKFLOW</span><span className="live">● LIVE</span></div><div className="workflow"><div className="step active"><span className="step-num">01</span><div><b>Image review</b><small>Import & select frames</small></div><span className="step-state">ACTIVE</span></div><div className={`step ${Object.keys(analysis).length?'active':''}`}><span className="step-num">02</span><div><b>Image Analysis</b><small>Brightness, contrast, clipping</small></div><span className="soon">{Object.keys(analysis).length?'DONE':'LOCAL'}</span></div><div className={`step ${current && technicalEstimates[current.id] ? "active" : "disabled"}`}><span className="step-num">03</span><div><b>Neutralization</b><small>Technical base correction</small></div><span className="soon">{current && technicalEstimates[current.id] ? "ESTIMATE" : "SOON"}</span></div><div className="step disabled"><span className="step-num">04</span><div><b>Creative grade</b><small>Series-aware color profile</small></div><span className="soon">SOON</span></div><div className="step disabled"><span className="step-num">05</span><div><b>AI Retouch</b><small>Skin & detail refinement</small></div><span className="soon">SOON</span></div></div><div className="panel-title"><SlidersHorizontal size={15}/> MANUAL PREVIEW <button onClick={()=>resetCurrent()} title="Reset"><RotateCcw size={13}/></button></div><button className="auto-button" disabled={!current || estimating} onClick={estimateCurrent}>{estimating?'Estimating…':'Estimate technical correction'}</button>{current&&technicalEstimates[current.id]&&<div className="analysis-card"><b>TECHNICAL ESTIMATE</b><p>Exposure <strong>{technicalEstimates[current.id].exposure_ev>0?'+':''}{technicalEstimates[current.id].exposure_ev} EV</strong> · Highlights <strong>{technicalEstimates[current.id].highlights}</strong> · Shadows <strong>{technicalEstimates[current.id].shadows}</strong></p><small>Confidence {Math.round(technicalEstimates[current.id].confidence*100)}%. Exposure, highlights and shadows are applied as editable preview adjustments. {technicalEstimates[current.id].warnings.join(' ')}</small></div>}{([['exposure','Exposure',-100,100],['contrast','Contrast',-50,50],['saturation','Saturation',-50,50],['warmth','Warmth',-100,100],['highlights','Highlights',-100,100],['shadows','Shadows',-100,100]] as const).map(([key,label,min,max])=><div className="slider-row" key={key}><div className="slider-label"><span>{label}</span><span className="slider-value">{(adjust[key]??0)>0?'+':''}{adjust[key]??0}</span></div><input type="range" min={min} max={max} value={adjust[key]??0} disabled={!current} onChange={e=>setValue(key,Number(e.target.value))}/><div className="slider-scale"><span>{key==='exposure'?'−1 EV':key==='warmth'?'Cool':'−'}</span><span>{key==='exposure'?'+1 EV':key==='warmth'?'Warm':'+'}</span></div></div>)}<div className="panel-title"><WandSparkles size={15}/> PRESET LIBRARY <button onClick={()=>presetInputRef.current?.click()} title="Import XMP or Capture One styles"><Upload size={13}/></button></div>
       <input ref={presetInputRef} type="file" accept=".xmp,.costyle,.zip" multiple hidden onChange={e=>{void importPresets(e.target.files).finally(()=>{if(presetInputRef.current)presetInputRef.current.value='';});}}/>
-      <div className="preset-library"><button className="auto-button" onClick={()=>presetInputRef.current?.click()}>Import presets or ZIP archive (.xmp, .costyle, .zip)</button>{presets.length===0?<small>Import preset files to build a local library. Source parameters are retained. Recognized curves, Adobe HSL ranges and supported color-balance triples are rendered in preview and export; other vendor controls remain unrendered.</small>:presets.map(p=><button className="auto-button" key={p.id} disabled={!current} onClick={()=>applyPreset(p)}><span>{p.name}</span><small>{p.family} · {p.source} · {Object.keys(p.params).length} source parameters · {Object.keys(p.curves).length+Object.keys(p.hsl).length+Object.keys(p.colorBalance).length} recognized groups · {p.unsupportedParams.length} not rendered{p.colorCorrections.length?` · ${p.colorCorrections.length} C1 correction rows preserved, not rendered`:''}</small></button>)}</div><div className="notice"><WandSparkles size={15}/><span>Adjustments are applied to exported PNG files in the browser. AI processing is not connected yet.</span></div><div className="inspector-bottom"><button className="ai-button" disabled={!photos.length || analyzing} onClick={analyzeSeries}><ScanFace size={15}/> {analyzing?'Analyzing…':'Analyze series'} <span>{Object.keys(analysis).length?'RE-RUN':'LOCAL'}</span></button>{current && analysis[current.id] && <div className="analysis-card"><b>LOCAL IMAGE ANALYSIS</b><p>Brightness <strong>{analysis[current.id].brightness}%</strong> · Contrast <strong>{analysis[current.id].contrast}%</strong> · Clipped <strong>{analysis[current.id].clipped}%</strong></p><small>{analysis[current.id].recommendation}</small><button className="auto-button" onClick={()=>{const b=analysis[current.id].brightness;setValue('exposure',b<=0?100:Math.max(-100,Math.min(100,Math.round(100*Math.log2(50/b)))));}}>Apply exposure suggestion</button></div>}<small>Heuristic pixel metrics; AI model is not connected.</small></div></aside>
+      <div className="preset-library"><button className="auto-button" onClick={()=>presetInputRef.current?.click()}>Import presets or ZIP archive (.xmp, .costyle, .zip)</button>{presets.length===0?<small>Import preset files to build a local library. Source parameters are retained. Recognized curves, Adobe HSL ranges and supported color-balance triples are rendered in preview and export; other vendor controls remain unrendered.</small>:presets.map(p=><button className="auto-button" key={p.id} disabled={!current} onClick={()=>applyPreset(p)}><span>{p.name}</span><small>{p.family} · {p.source} · {Object.keys(p.params).length} source parameters · {Object.keys(p.curves).length+Object.keys(p.hsl).length+Object.keys(p.colorBalance).length} recognized groups · {p.unsupportedParams.length} not rendered{p.colorCorrections.length?` · ${p.colorCorrections.length} C1 correction rows preserved, not rendered`:''}</small></button>)}</div><div className="notice"><WandSparkles size={15}/><span>Exports are packaged as one ZIP with a manifest. AI processing is not connected yet.</span></div><div className="inspector-bottom"><button className="ai-button" disabled={!photos.length || analyzing} onClick={analyzeSeries}><ScanFace size={15}/> {analyzing?'Analyzing…':'Analyze series'} <span>{Object.keys(analysis).length?'RE-RUN':'LOCAL'}</span></button>{current && analysis[current.id] && <div className="analysis-card"><b>LOCAL IMAGE ANALYSIS</b><p>Brightness <strong>{analysis[current.id].brightness}%</strong> · Contrast <strong>{analysis[current.id].contrast}%</strong> · Clipped <strong>{analysis[current.id].clipped}%</strong></p><small>{analysis[current.id].recommendation}</small><button className="auto-button" disabled={estimating} onClick={estimateCurrent}>{estimating?'Estimating…':'Get technical estimate from backend'}</button>{technicalEstimates[current.id]&&<small>Estimate: {technicalEstimates[current.id].exposure_ev>0?'+':''}{technicalEstimates[current.id].exposure_ev} EV · Highlights {technicalEstimates[current.id].highlights} · Shadows {technicalEstimates[current.id].shadows} · Confidence {Math.round(technicalEstimates[current.id].confidence*100)}%. Applied exposure can be adjusted with the slider; highlights and shadows remain suggestions.</small>}</div>}<small>Heuristic pixel metrics; AI model is not connected.</small></div></aside>
     </section>
   </main>;
 }
