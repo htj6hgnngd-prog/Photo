@@ -9,6 +9,18 @@ export function parseStyle(source:string,filename:string):ParsedStyle {
  else for(const m of source.matchAll(/crs:([A-Za-z0-9]+)="([^"]*)"/g))params[m[1]]=m[2];
  const curves:Record<string,CurvePoint[]>={};
  for(const [key,val] of Object.entries(params)) if(/^(GradationCurve|ToneCurve|.*Curve)/i.test(key)) { const pts=curve(val); if(pts.length>1)curves[key]=pts; }
+ // Adobe stores tone curves as RDF sequences rather than attributes; retain the original
+ // parameter text and additionally decode the point sequence for pixel rendering.
+ if(format==='xmp' && typeof DOMParser!=='undefined'){
+   const doc=new DOMParser().parseFromString(source,'application/xml');
+   for(const node of Array.from(doc.getElementsByTagName('*'))){
+     const local=node.localName||node.nodeName.split(':').pop()||'';
+     if(!/^ToneCurve(PV2012|PV2012Red|PV2012Green|PV2012Blue|Name2012)$/.test(local))continue;
+     const key=local==='ToneCurvePV2012'?'ToneCurvePV2012':local;
+     const pts=Array.from(node.getElementsByTagName('*')).filter(n=>n.localName==='li').map(n=>n.textContent||'').map(v=>v.split(',').map(x=>Number(x.trim()))).filter(v=>v.length===2&&v.every(Number.isFinite)).map(([x,y])=>[x/255,y/255] as CurvePoint);
+     if(pts.length>1)curves[key]=pts;
+   }
+ }
  const hsl:ParsedStyle['hsl']={};
  for(const channel of channels) { const h=Number(params['HueAdjustment'+channel]??0),s=Number(params['SaturationAdjustment'+channel]??0),l=Number(params['LuminanceAdjustment'+channel]??0); if(h||s||l)hsl[channel.toLowerCase()]={h,s,l}; }
  const colorBalance:ParsedStyle['colorBalance']={};
