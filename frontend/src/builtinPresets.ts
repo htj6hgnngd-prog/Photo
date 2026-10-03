@@ -1,0 +1,6 @@
+export type BuiltinPreset = { id:string; name:string; family:string; source:string; params:Record<string,string>; adjustments:{exposure:number;contrast:number;saturation:number;warmth:number} };
+// Values parsed from the supplied Capture One/XMP preset files. Advanced vendor-specific controls remain metadata until the renderer supports them.
+const rows: Array<[string,number,number,number,number]> = [
+['Голубничий 2024 2',0,-14,0,0],['Голубничий 8',92.5,-40,2,0],['Голубничий 11',62.5,68,-10,0],['Голубничий 9',-7.5,26,0,0],['Голубничий 10',-37.5,-1,0,0],['Голубничий 1',100,44,0,0],['Голубничий 2024 3',0,33,8,0],['Голубничий 2024 8',25,-13,2,0],['Голубничий 2024 1',-45,-27,5,0],['Голубничий 2',-100,33,0,0],['Голубничий 3',-68.75,32,-10,0],['Голубничий 2024 9',0,0,0,0],['Голубничий 6',25,0,-15,0],['Голубничий 2024 5',62.5,-7,0,0],['Голубничий 2024 4',-50,-59,-5,0],['Голубничий 7',31.25,-20,0,0],['Голубничий 5',-81.25,31,0,0],['Голубничий 2024 6',31.25,-20,0,0],['Голубничий 2024 7',-43.75,0,0,0],['Голубничий 4',-58.75,22,0,0]
+];
+export const builtinPresets: BuiltinPreset[] = rows.map(([name,exposure,contrast,saturation,warmth],i)=>({id:'builtin-golubchiry-'+i,name,family:'Capture One · Голубничий',source:'Встроенный каталог',params:{},adjustments:{exposure,contrast,saturation,warmth}}));
