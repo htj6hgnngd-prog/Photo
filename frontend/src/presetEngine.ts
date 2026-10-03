@@ -58,11 +58,12 @@ export function applyPresetStyle(data:Uint8ClampedArray, style:{params:Record<st
  const exposure=Math.pow(2,num(['Exposure2012','Exposure']) );
  const contrast=1+num(['Contrast2012','Contrast'])/100;
  const saturation=mono?0:1+num(['Saturation'])/100;
+ const highlights=num(['Highlights2012','Highlights'])/100, shadows=num(['Shadows2012','Shadows'])/100, whites=num(['Whites2012','Whites'])/100, blacks=num(['Blacks2012','Blacks'])/100;
  const temp=num(['Temperature'],5500);
  const warmth=p.Temperature===undefined?0:clamp((temp-5500)/250,-2,2)*7;
  const inputBlack=num(['InputBlack','LevelsInputBlack'],0), inputWhite=num(['InputWhite','LevelsInputWhite'],255);
  const outputBlack=num(['OutputBlack','LevelsOutputBlack'],0), outputWhite=num(['OutputWhite','LevelsOutputWhite'],255);
- const black=clamp(inputBlack/255), white=clamp(inputWhite/255,0.001,1);
+ const black=clamp(inputBlack/255,0,0.998), white=clamp(inputWhite/255,black+0.002,1);
  const outB=clamp(outputBlack/255), outW=clamp(outputWhite/255);
  const grayKeys=['GrayMixerRed','GrayMixerOrange','GrayMixerYellow','GrayMixerGreen','GrayMixerAqua','GrayMixerBlue','GrayMixerPurple','GrayMixerMagenta'];
  const defaultWeights=[40,60,60,40,60,20,20,40];
@@ -74,6 +75,10 @@ export function applyPresetStyle(data:Uint8ClampedArray, style:{params:Record<st
    b=clamp((b-black)/(white-black))* (outW-outB)+outB;
    r*=exposure;g*=exposure;b*=exposure;
    r=(r-.5)*contrast+.5;g=(g-.5)*contrast+.5;b=(b-.5)*contrast+.5;
+   const preY=.2126*r+.7152*g+.0722*b, lum=clamp(preY);
+   const shadowMask=Math.pow(1-lum,2), highlightMask=Math.pow(lum,2), whiteMask=Math.pow(lum,4), blackMask=Math.pow(1-lum,4);
+   const tonal=shadows*.22*shadowMask+highlights*.22*highlightMask+whites*.16*whiteMask+blacks*.16*blackMask;
+   r+=tonal;g+=tonal;b+=tonal;
    const y=.2126*r+.7152*g+.0722*b;
    r=y+(r-y)*saturation+warmth/255;
    g=y+(g-y)*saturation;
