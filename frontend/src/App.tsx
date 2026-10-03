@@ -13,6 +13,7 @@ function renderManual(data: Uint8ClampedArray, a: Adjustments) { const exposure=
 export default function App() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [presets, setPresets] = useState<Preset[]>(bundledPresets);
+  useEffect(() => { try { const saved=window.localStorage.getItem('photo-editor-presets-v1'); if(saved){const parsed=JSON.parse(saved) as Preset[]; if(Array.isArray(parsed))setPresets([...bundledPresets,...parsed.filter(p=>p&&typeof p.id==='string'&&!p.id.startsWith('bundled-'))]);} } catch { /* Ignore invalid or unavailable local preset storage. */ } }, []);
   const [appliedStyles,setAppliedStyles] = useState<Record<string,Preset>>({});
   const presetInputRef = useRef<HTMLInputElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -74,7 +75,7 @@ export default function App() {
       const supported=new Set(['Exposure','Exposure2012','Contrast','Contrast2012','Saturation','Temperature','Name','PresetName','GradationCurve','GradationCurveY','GradationCurveRed','GradationCurveGreen','GradationCurveBlue','ToneCurvePV2012','ToneCurvePV2012Red','ToneCurvePV2012Green','ToneCurvePV2012Blue','ColorBalanceShadow','ColorBalanceMidtone','ColorBalanceHighlight']); for(const channel of ['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'])for(const kind of ['Hue','Saturation','Luminance'])supported.add(kind+'Adjustment'+channel); const unsupportedParams=Object.keys(params).filter(key=>!supported.has(key)&&!Object.keys(structured.curves).includes(key));
       parsed.push({id:file.name+'-'+file.size+'-'+file.lastModified,name,family:isC1?'Capture One':'Lightroom / Camera Raw',source:file.name,params,curves:structured.curves,hsl:structured.hsl,colorBalance:structured.colorBalance,colorCorrections:structured.colorCorrections,unsupportedParams,format:structured.format,adjustments:{exposure:Math.max(-100,Math.min(100,exposure)),contrast:Math.max(-50,Math.min(50,contrast)),saturation:Math.max(-50,Math.min(50,saturation)),warmth:Math.max(-100,Math.min(100,warmth))}});
     }
-    setPresets(prev=>[...prev,...parsed.filter(p=>!prev.some(old=>old.id===p.id))]);
+    setPresets(prev=>{const merged=[...prev,...parsed.filter(p=>!prev.some(old=>old.id===p.id))];try{window.localStorage.setItem('photo-editor-presets-v1',JSON.stringify(merged.filter(p=>!p.id.startsWith('bundled-'))));}catch{alert('Не удалось сохранить всю библиотеку пресетов на этом устройстве. Попробуйте импортировать меньшие ZIP-архивы.');}return merged;});
   }
   function applyPreset(preset:Preset) {
     if (!current) return;
