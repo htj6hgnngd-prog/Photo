@@ -53,7 +53,7 @@ export default function App() {
       ctx.drawImage(image,0,0);
       const manual=ctx.getImageData(0,0,canvas.width,canvas.height);renderManual(manual.data,adjustments[current.id]||initial);ctx.putImageData(manual,0,0);
       const style=appliedStyles[current.id];
-      if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);const map=[['GradationCurve','rgb'],['GradationCurveY','rgb'],['ToneCurvePV2012','rgb'],['ToneCurvePV2012Red','r'],['ToneCurvePV2012Green','g'],['ToneCurvePV2012Blue','b'],['GradationCurveRed','r'],['GradationCurveGreen','g'],['GradationCurveBlue','b']] as const;for(const [key,ch] of map){const points=style.curves[key];if(points?.length)applyCurveChannel(pixels.data,points,ch);}applyHsl(pixels.data,style.hsl);applyColorBalance(pixels.data,style.colorBalance);ctx.putImageData(pixels,0,0);}
+      if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);applyPresetStyle(pixels.data,style);ctx.putImageData(pixels,0,0);}
     };
     image.src=current.url;
     return ()=>{cancelled=true;image.onload=null;};
@@ -176,7 +176,7 @@ export default function App() {
         const manual=ctx.getImageData(0,0,canvas.width,canvas.height);
         renderManual(manual.data, adjustments[photo.id] || initial);
         ctx.putImageData(manual,0,0);
-        if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);const map=[['GradationCurve','rgb'],['GradationCurveY','rgb'],['ToneCurvePV2012','rgb'],['ToneCurvePV2012Red','r'],['ToneCurvePV2012Green','g'],['ToneCurvePV2012Blue','b'],['GradationCurveRed','r'],['GradationCurveGreen','g'],['GradationCurveBlue','b']] as const;for(const [key,ch] of map){const points=style.curves[key];if(points?.length)applyCurveChannel(pixels.data,points,ch);}applyHsl(pixels.data,style.hsl);applyColorBalance(pixels.data,style.colorBalance);ctx.putImageData(pixels,0,0);}
+        if(style){const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);applyPresetStyle(pixels.data,style);ctx.putImageData(pixels,0,0);}
         const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Не удалось обработать ' + photo.name)), 'image/png'));
         const base=photo.name.replace(/\.[^.]+$/, '') + '-edited.png';
         let filename=base, suffix=2;
