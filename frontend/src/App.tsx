@@ -63,6 +63,7 @@ export default function App() {
       }
       const structured = parseStyle(source,file.name);
       Object.assign(params, structured.params);
+      name = structured.name || name;
       const num = (key:string, fallback=0) => { const value=Number(params[key]); return Number.isFinite(value)?value:fallback; };
       const isC1=ext==='costyle';
       const exposure=isC1?num('Exposure')*100:num('Exposure2012')*100;
