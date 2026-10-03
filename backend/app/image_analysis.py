@@ -79,3 +79,52 @@ def analyze_image_bytes(data: bytes) -> dict[str, object]:
             "JPEG analysis cannot recover clipped highlights or RAW sensor data.",
         ],
     }
+
+
+
+def estimate_technical_adjustments(diagnostics: dict[str, object]) -> dict[str, object]:
+    """Create conservative, editable starting values from global pixel statistics.
+
+    This is a heuristic baseline, not semantic AI: scene content and lighting
+    can make a globally dark or color-biased image intentional.
+    """
+    luminance = diagnostics["luminance"]
+    median = float(luminance["p50"])
+    p10 = float(luminance["p10"])
+    p90 = float(luminance["p90"])
+    near_black = float(luminance["near_black_fraction"])
+    near_white = float(luminance["near_white_fraction"])
+
+    # Avoid unstable estimates for nearly black/white frames.
+    if median <= 0.03 or median >= 0.97:
+        exposure_ev = 0.0
+        confidence = 0.2
+        warnings = ["Exposure estimate skipped: median brightness is near an extreme."]
+    else:
+        import math
+        exposure_ev = round(max(-0.7, min(0.7, math.log2(0.42 / median))), 2)
+        confidence = 0.35
+        warnings = ["Global histogram cannot distinguish intentional low/high-key lighting from exposure error."]
+
+    highlights = -20.0 if p90 > 0.92 and near_white > 0.01 else 0.0
+    shadows = 20.0 if p10 < 0.08 and near_black > 0.01 else 0.0
+    if highlights or shadows:
+        confidence = min(confidence, 0.3)
+    warnings.append("White balance is left unchanged because scene lighting and neutral references are unknown.")
+
+    return {
+        "adjustments": {
+            "exposure_ev": exposure_ev,
+            "temperature": None,
+            "tint": None,
+            "highlights": highlights,
+            "shadows": shadows,
+            "black_point": 0.0,
+            "white_point": 0.0,
+        },
+        "confidence": confidence,
+        "editable": True,
+        "applied": False,
+        "method": "conservative_histogram_heuristic",
+        "warnings": warnings,
+    }
