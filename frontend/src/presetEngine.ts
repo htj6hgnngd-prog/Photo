@@ -34,7 +34,8 @@ export function parseStyle(source:string,filename:string):ParsedStyle {
  }
  const hsl:ParsedStyle['hsl']={};
  for(const channel of channels) { const h=Number(params['HueAdjustment'+channel]??0),s=Number(params['SaturationAdjustment'+channel]??0),l=Number(params['LuminanceAdjustment'+channel]??0); if(h||s||l)hsl[channel.toLowerCase()]={h,s,l}; }
- const colorCorrections=format==='costyle'&&params.ColorCorrections?params.ColorCorrections.split(';').filter(Boolean).map(row=>row.split(',')):[];\n const colorBalance:ParsedStyle['colorBalance']={};
+ const colorCorrections=format==='costyle'&&params.ColorCorrections?params.ColorCorrections.split(';').filter(Boolean).map(row=>row.split(',')):[];
+ const colorBalance:ParsedStyle['colorBalance']={};
  for(const key of ['ColorBalanceShadow','ColorBalanceMidtone','ColorBalanceHighlight']) if(params[key]) colorBalance[key]=params[key].split(/[;,]/).map(Number);
  const xmlName=(()=>{if(format!=='xmp'||typeof DOMParser==='undefined')return undefined;const doc=new DOMParser().parseFromString(source,'application/xml');const nameNode=Array.from(doc.getElementsByTagName('*')).find(n=>(n.localName||n.nodeName.split(':').pop())==='Name');return nameNode?.textContent?.trim()||nameNode?.getElementsByTagName('*')[0]?.textContent?.trim()||undefined;})();
  return {name:params.Name||params.PresetName||xmlName||filename.replace(/\.(xmp|costyle)$/i,''),format,params,curves,hsl,colorBalance};
