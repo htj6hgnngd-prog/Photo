@@ -126,6 +126,7 @@ export default function App() {
     try {
       const archive = new JSZip();
       const usedNames = new Set<string>();
+      const manifestItems: Array<{source:string;output:string;style:string|null;adjustments:Adjustments}> = [];
       for (const photo of photos) {
         const image = new Image(); image.src = photo.url;
         await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('Не удалось открыть ' + photo.name)); });
@@ -142,9 +143,10 @@ export default function App() {
         let filename=base, suffix=2;
         while(usedNames.has(filename.toLowerCase())) filename=base.replace(/\.png$/i, '-' + suffix++ + '.png');
         usedNames.add(filename.toLowerCase());
-        archive.file(filename,blob);
+        archive.file(filename,blob, {compression:'STORE'});
+        manifestItems.push({source:photo.name,output:filename,style:style?.name||null,adjustments:adjustments[photo.id]||initial});
       }
-      archive.file('export-manifest.json',JSON.stringify({createdAt:new Date().toISOString(),count:photos.length,format:'PNG',items:photos.map(photo=>({source:photo.name,output:photo.name.replace(/\.[^.]+$/, '')+'-edited.png',style:appliedStyles[photo.id]?.name||null,adjustments:adjustments[photo.id]||initial}))},null,2));
+      archive.file('export-manifest.json',JSON.stringify({createdAt:new Date().toISOString(),count:manifestItems.length,format:'PNG',items:manifestItems},null,2));
       const zip=await archive.generateAsync({type:'blob'});
       const url=URL.createObjectURL(zip);const link=document.createElement('a');link.href=url;link.download='photo-edited-batch.zip';document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),3000);
     } catch (error) { alert(error instanceof Error ? error.message : 'Ошибка экспорта'); }
