@@ -25,7 +25,8 @@ export function parseStyle(source:string,filename:string):ParsedStyle {
  for(const channel of channels) { const h=Number(params['HueAdjustment'+channel]??0),s=Number(params['SaturationAdjustment'+channel]??0),l=Number(params['LuminanceAdjustment'+channel]??0); if(h||s||l)hsl[channel.toLowerCase()]={h,s,l}; }
  const colorBalance:ParsedStyle['colorBalance']={};
  for(const key of ['ColorBalanceShadow','ColorBalanceMidtone','ColorBalanceHighlight']) if(params[key]) colorBalance[key]=params[key].split(/[;,]/).map(Number);
- return {name:params.Name||params.PresetName||filename.replace(/\.(xmp|costyle)$/i,''),format,params,curves,hsl,colorBalance};
+ const xmlName=format==='xmp'&&typeof DOMParser!=='undefined'?new DOMParser().parseFromString(source,'application/xml').getElementsByTagName('rdf:li')[0]?.textContent?.trim():undefined;
+ return {name:params.Name||params.PresetName||xmlName||filename.replace(/\.(xmp|costyle)$/i,''),format,params,curves,hsl,colorBalance};
 }
 const clamp=(v:number,min=0,max=1)=>Math.max(min,Math.min(max,v));
 function sample(points:CurvePoint[],x:number):number { if(!points.length)return x; const p=points.map(([a,b])=>[clamp(a),clamp(b)] as CurvePoint).sort((a,b)=>a[0]-b[0]); if(x<=p[0][0])return p[0][1]; for(let i=1;i<p.length;i++){if(x<=p[i][0]){const [x0,y0]=p[i-1],[x1,y1]=p[i];return x1===x0?y1:y0+(y1-y0)*(x-x0)/(x1-x0)}}return p[p.length-1][1]; }
